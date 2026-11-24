@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sketch · AI Image Editor</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header id="menubar"></header>
+  <div id="optionsbar"></div>
+
+  <main id="workspace">
+    <nav id="toolbar"></nav>
+
+    <section id="stage">
+      <canvas id="view"></canvas>
+      <div class="drop-hint">Drop images to open / add as layers</div>
+    </section>
+
+    <aside id="panels">
+      <div class="panel ai-panel" id="gemini-panel">
+        <div class="panel-head"><span class="ai-title"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>Gemini AI</span></div>
+        <div class="panel-body" id="gemini-body"></div>
+      </div>
+
+      <div class="panel layers-panel">
+        <div class="panel-head"><span>Layers</span></div>
+        <div class="panel-body">
+          <div class="layer-props">
+            <select id="layer-blend" title="Blend mode"></select>
+            <label class="row slider" title="Layer opacity"><span class="lbl">Opacity</span><input type="range" id="layer-opacity" min="0" max="100"><span class="val" id="layer-opacity-val">100%</span></label>
+          </div>
+          <div class="layer-list" id="layer-list"></div>
+          <div class="layer-actions" id="layer-actions"></div>
+        </div>
+      </div>
+
+      <div class="panel history-panel">
+        <div class="panel-head"><span>History</span></div>
+        <div class="panel-body"><div class="history-list" id="history-list"></div></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer id="statusbar">
+    <span id="st-size"></span>
+    <span id="st-sel"></span>
+    <span class="grow"></span>
+    <span id="st-pos"></span>
+    <button id="st-zoom" title="Click to fit on screen">100%</button>
+  </footer>
+
+  <input type="file" id="file-input" accept="image/*" multiple hidden>
+  <div id="toast"></div>
+
+  <script src="js/core.js"></script>
+  <script src="js/selection.js"></script>
+  <script src="js/tools.js"></script>
+  <script src="js/filters.js"></script>
+  <script src="js/gemini.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
