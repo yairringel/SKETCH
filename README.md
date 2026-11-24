@@ -28,7 +28,11 @@ Every paint, fill, adjustment and filter is limited to the active selection.
 ## How the Gemini edit works
 
 1. **No selection**: the visible image (or only the active layer) is sent with your prompt. The result comes back as a new layer.
-2. **With a selection**: the editor crops the selection plus some surrounding **context** (adjustable). It expands that crop to the nearest aspect ratio Gemini supports, and sends it together with a black and white **mask** that tells Gemini where to edit. The result is placed back at the same spot as a new layer, masked to your selection with a soft **edge blend**.
+2. **With a selection**, choose what to send:
+   - **Selection only** (default): only the selected pixels are sent. Everything outside the selection is replaced with neutral gray padding, so the rest of the image never leaves your machine.
+   - **With context**: the selection plus some surrounding area (adjustable) is sent, together with a black and white **mask** that tells Gemini where to edit. This usually blends better with the surroundings.
+
+   In both cases the crop is fitted to the nearest aspect ratio Gemini supports. The result is placed back at the same spot as a new layer, masked to your selection with a soft **edge blend**.
 3. **Variations** (1–4) run in parallel. Each one becomes its own layer, and only the first is visible, so you can toggle them to compare.
 4. **Reference images** (from a file, or from the canvas or selection) are sent along. For example: "put this logo on the shirt".
 5. The **Generate** tab creates new images from text. They are added as a layer or as a new document.

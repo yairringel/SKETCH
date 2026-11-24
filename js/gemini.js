@@ -36,7 +36,7 @@
   const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch (e) { /* ignore */ } };
   const modelId = () => (settings.model === 'custom' ? settings.customModel.trim() : settings.model) || MODELS[0][0];
 
-  const st = { mode: 'edit', source: 'composite', padding: 25, feather: 4, maskHint: true, variations: 1, aspect: 'match', genOutput: 'layer', refs: [] };
+  const st = { mode: 'edit', source: 'composite', scope: 'selection', padding: 25, feather: 4, maskHint: true, variations: 1, aspect: 'match', genOutput: 'layer', refs: [] };
 
   // --------------------------------------------------------- geometry
   function nearestRatios(r) {
@@ -60,6 +60,15 @@
     }
     return { rect: min, ratio: nearestRatios(min.w / min.h)[0] };
   }
+  /** Tight frame around the selection, padded (with filler, may extend past the canvas) to a supported aspect ratio. */
+  function fitTight(b) {
+    const ratio = nearestRatios(b.w / b.h)[0], R = ratioVal(ratio);
+    let w = b.w, h = b.h;
+    if (w / h < R) w = h * R; else h = w / R;
+    w = Math.round(w); h = Math.round(h);
+    return { rect: { x: Math.round(b.x + b.w / 2 - w / 2), y: Math.round(b.y + b.h / 2 - h / 2), w, h }, ratio };
+  }
+  const FILLER = '#808080';
 
   function encode(c, mime, q) {
     const url = c.toDataURL(mime, q);
@@ -116,26 +125,41 @@
 
   async function runEdit(prompt, signal) {
     const d = App.doc, mask = App.selection.mask, b = App.selection.bounds;
+    const onlySel = !!(mask && b && st.scope === 'selection');
     let rect, ratio;
-    if (mask && b) ({ rect, ratio } = fitRegion(b, d.width, d.height, st.padding / 100));
+    if (onlySel) ({ rect, ratio } = fitTight(b));
+    else if (mask && b) ({ rect, ratio } = fitRegion(b, d.width, d.height, st.padding / 100));
     else { rect = { x: 0, y: 0, w: d.width, h: d.height }; ratio = nearestRatios(d.width / d.height)[0]; }
     G.busyRect = rect;
 
     const src = st.source === 'layer' ? App.activeLayer().canvas : App.getComposite();
     const s = Math.min(1, settings.maxUpload / Math.max(rect.w, rect.h));
     const cw = Math.max(1, Math.round(rect.w * s)), ch = Math.max(1, Math.round(rect.h * s));
+    // draw a doc-sized canvas into the crop frame (works even when the frame extends past the canvas)
+    const place = (ctx, c) => ctx.drawImage(c, -rect.x * s, -rect.y * s, c.width * s, c.height * s);
     const crop = U.canvas(cw, ch), cx = crop.getContext('2d');
-    cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch);
     cx.imageSmoothingQuality = 'high';
-    cx.drawImage(src, rect.x, rect.y, rect.w, rect.h, 0, 0, cw, ch);
+    cx.fillStyle = onlySel ? FILLER : '#fff'; cx.fillRect(0, 0, cw, ch);
+    if (onlySel) {
+      // only the selected pixels; everything else becomes neutral filler
+      const part = U.canvas(cw, ch), px = part.getContext('2d');
+      px.imageSmoothingQuality = 'high';
+      place(px, src);
+      px.globalCompositeOperation = 'destination-in';
+      place(px, mask);
+      cx.drawImage(part, 0, 0);
+    } else place(cx, src);
 
     const images = [encode(crop, 'image/jpeg', 0.92)];
     let text = prompt.trim();
-    if (mask) {
+    if (onlySel) {
+      text += '\n\nThe image contains only the selected part of a larger picture; the flat gray area around it is padding, not part of the content. ' +
+        'Apply the requested change to the content, and return the edited image with exactly the same framing.';
+    } else if (mask) {
       if (st.maskHint) {
         const mc = U.canvas(cw, ch), mx = mc.getContext('2d');
         mx.fillStyle = '#000'; mx.fillRect(0, 0, cw, ch);
-        mx.drawImage(mask, rect.x, rect.y, rect.w, rect.h, 0, 0, cw, ch);
+        place(mx, mask);
         images.push(encode(mc, 'image/png'));
         text += '\n\nThe first image is the picture to edit. The second image is a black-and-white mask with the same framing: ' +
           'apply the requested change ONLY inside the white area, and keep everything in the black area unchanged. ' +
@@ -401,9 +425,34 @@
       key: $('ai-key'), refList: $('ai-ref-list'),
     };
 
-    els.selOnly.appendChild(App.ui.sliderRow('Context', 0, 150, 5, st.padding, '%', v => { st.padding = v; }, 'Extra surrounding area sent to Gemini so the edit blends with its context'));
+    const scopeSeg = document.createElement('div');
+    scopeSeg.className = 'seg';
+    const ctxOpts = document.createElement('div');
+    const scopeHelp = document.createElement('div');
+    scopeHelp.className = 'hint';
+    const syncScope = () => {
+      scopeSeg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.scope === st.scope));
+      ctxOpts.hidden = st.scope === 'selection';
+      scopeHelp.textContent = st.scope === 'selection'
+        ? 'Only the selected pixels are sent; the rest of the image stays private and untouched.'
+        : 'The selection plus surrounding area and a mask are sent, so the edit can match its context.';
+    };
+    [['selection', 'Selection only'], ['context', 'With context']].forEach(([v, l]) => {
+      const btn = document.createElement('button');
+      btn.dataset.scope = v; btn.textContent = l;
+      btn.onclick = () => { st.scope = v; syncScope(); };
+      scopeSeg.appendChild(btn);
+    });
+    const scopeRow = document.createElement('div');
+    scopeRow.className = 'row';
+    const scopeLbl = document.createElement('span');
+    scopeLbl.textContent = 'Send';
+    scopeRow.append(scopeLbl, scopeSeg);
+    els.selOnly.append(scopeRow, scopeHelp, ctxOpts);
+    ctxOpts.appendChild(App.ui.sliderRow('Context', 0, 150, 5, st.padding, '%', v => { st.padding = v; }, 'Extra surrounding area sent to Gemini so the edit blends with its context'));
+    ctxOpts.appendChild(App.ui.checkRow('Send selection mask to Gemini', st.maskHint, v => { st.maskHint = v; }));
     els.selOnly.appendChild(App.ui.sliderRow('Edge blend', 0, 60, 1, st.feather, 'px', v => { st.feather = v; }, 'Feathering of the result layer\'s mask edges'));
-    els.selOnly.appendChild(App.ui.checkRow('Send selection mask to Gemini', st.maskHint, v => { st.maskHint = v; }));
+    syncScope();
 
     const setMode = (m) => {
       st.mode = m;
